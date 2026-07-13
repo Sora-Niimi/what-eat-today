@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>今天吃什么</title>
+
+    <!-- PWA Meta -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="今天吃什么">
+    <meta name="theme-color" content="#FF6B35">
+    <meta name="description" content="随机选择今天吃什么，支持健康权重与多种筛选条件">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍽️</text></svg>">
+
+    <style>
+        :root {
+            --bg: #FFF8F0;
+            --card: #FFFFFF;
+            --primary: #FF6B35;
+            --primary-dark: #E55A2B;
+            --green: #4CAF50;
+            --green-light: #E8F5E9;
+            --red: #F44336;
+            --red-light: #FFEBEE;
+            --yellow: #FF9800;
+            --yellow-light: #FFF3E0;
+            --text: #333333;
+            --text-secondary: #888888;
+            --border: #EEEEEE;
+            --shadow: 0 2px 12px rgba(0,0,0,0.08);
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            justify-content: center;
+            padding: 0 16px;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 24px 0 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding-top: 8px;
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: 2px;
+        }
+        .header .subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Loading */
+        .loading-indicator {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+            padding: 40px 0;
+        }
+        .loading-indicator .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Error */
+        .error-msg {
+            background: var(--red-light);
+            color: var(--red);
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* Filter Section */
+        .filter-section {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+        }
+        .filter-section h3 {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            font-weight: 500;
+            letter-spacing: 1px;
+        }
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .filter-group:last-child { margin-bottom: 0; }
+        .filter-group-label {
+            width: 100%;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+        }
+
+        /* Toggle Pill */
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 2px solid var(--border);
+            background: white;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .pill:active { transform: scale(0.96); }
+        .pill.active {
+            border-color: var(--primary);
+            background: #FFF3ED;
+            color: var(--primary);
+        }
+        .pill.method-waimai.active {
+            border-color: #FF9800;
+            background: #FFF8E1;
+            color: #E65100;
+        }
+        .pill.method-dian.active {
+            border-color: #2196F3;
+            background: #E3F2FD;
+            color: #0D47A1;
+        }
+        .pill.method-ziji.active {
+            border-color: #4CAF50;
+            background: #E8F5E9;
+            color: #1B5E20;
+        }
+        .pill.health-hi.active {
+            border-color: #4CAF50;
+            background: #E8F5E9;
+            color: #2E7D32;
+        }
+        .pill.health-lo.active {
+            border-color: #F44336;
+            background: #FFEBEE;
+            color: #C62828;
+        }
+        .pill.cheap.active {
+            border-color: #9C27B0;
+            background: #F3E5F5;
+            color: #6A1B9A;
+        }
+
+        /* Toggle Switch */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .toggle-label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 28px;
+            cursor: pointer;
+        }
+        .toggle-switch input { display: none; }
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: #DDD;
+            border-radius: 14px;
+            transition: background 0.3s;
+        }
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            left: 3px;
+            top: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: #9C27B0;
+        }
+        .toggle-switch input:checked + .toggle-slider::after {
+            transform: translateX(20px);
+        }
+
+        /* Stats */
+        .pool-stats {
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .pool-stats strong {
+            color: var(--primary);
+            font-size: 18px;
+        }
+
+        /* Roll Button */
+        .roll-btn-wrap {
+            text-align: center;
+        }
+        .roll-btn {
+            display: inline-block;
+            padding: 16px 48px;
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            background: var(--primary);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(255,107,53,0.35);
+            transition: all 0.2s;
+            letter-spacing: 2px;
+        }
+        .roll-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 8px rgba(255,107,53,0.25);
+        }
+        .roll-btn:disabled {
+            background: #CCC;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* Result Card */
+        .result-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 24px 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            animation: cardIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes cardIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .result-card .food-name {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        .result-card .food-emoji {
+            font-size: 48px;
+            margin-bottom: 8px;
+        }
+        .result-card .food-meta {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .meta-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            background: #F5F5F5;
+        }
+        .meta-tag.price { background: #E3F2FD; color: #1565C0; }
+        .meta-tag.method { background: #FFF3E0; color: #E65100; }
+        .meta-tag.health { background: #E8F5E9; color: #2E7D32; }
+        .meta-tag.health.low { background: #FFEBEE; color: #C62828; }
+        .stars {
+            color: #FFB300;
+            letter-spacing: 2px;
+        }
+
+        /* Again Button */
+        .again-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--primary);
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 1px;
+        }
+        .again-btn:active {
+            background: #FFF3ED;
+            transform: scale(0.97);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #CCC;
+            margin-top: auto;
+            padding-top: 20px;
+        }
+
+        /* Empty state */
+        .empty-hint {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 15px;
+            padding: 30px 0;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎲 今天吃什么</h1>
+            <div class="subtitle">让选择困难症不再烦恼</div>
+        </div>
+
+        <!-- Loading / Error -->
+        <div id="loadingArea" class="loading-indicator">
+            <div class="spinner"></div>
+            加载菜单中...
+        </div>
+        <div id="errorArea" class="error-msg" style="display:none;"></div>
+
+        <!-- Main App (hidden until loaded) -->
+        <div id="mainApp" style="display:none;">
+
+            <!-- Filter: 吃饭方式 -->
+            <div class="filter-section">
+                <h3>🍽️ 吃饭方式</h3>
+                <div class="filter-group" id="methodFilters">
+                    <span class="pill method-waimai active" data-filter="method" data-value="外卖">🛵 外卖</span>
+                    <span class="pill method-dian active" data-filter="method" data-value="到店">🚶 到店</span>
+                    <span class="pill method-ziji active" data-filter="method" data-value="自己做">👨‍🍳 自己做</span>
+                </div>
+            </div>
+
+            <!-- Filter: 健康等级 -->
+            <div class="filter-section">
+                <h3>🥗 健康等级（可多选）</h3>
+                <div class="filter-group" id="healthFilters">
+                    <span class="pill health-lo" data-filter="health" data-value="1">⭐1 不健康</span>
+                    <span class="pill health-lo" data-filter="health" data-value="2">⭐2 不太健康</span>
+                    <span class="pill" data-filter="health" data-value="3">⭐3 一般</span>
+                    <span class="pill health-hi" data-filter="health" data-value="4">⭐4 较健康</span>
+                    <span class="pill health-hi active" data-filter="health" data-value="5">⭐5 很健康</span>
+                </div>
+            </div>
+
+            <!-- Filter: 便宜模式 + 候选项统计 -->
+            <div class="filter-section">
+                <div class="toggle-row">
+                    <span class="toggle-label">💰 便宜模式（≤15元）</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="cheapToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="pool-stats" style="margin-top:12px;">
+                    当前候选：<strong id="poolCount">0</strong> 项
+                </div>
+            </div>
+
+            <!-- Roll Button -->
+            <div class="roll-btn-wrap">
+                <button class="roll-btn" id="rollBtn" onclick="roll()">🎯 随机选择</button>
+            </div>
+
+            <!-- Result Area -->
+            <div id="resultArea"></div>
+        </div>
+
+        <div class="footer">数据来源：今天吃什么.md · 可随时编辑</div>
+    </div>
+
+    <script>
+    // ==================== DATA & PARSING ====================
+    let allFoods = [];
+    let dataLoaded = false;
+
+    // Food emoji mapping
+    const foodEmojis = {
+        'KFC': '🍗', '麦当劳': '🍔', '德克士': '🍗', '基本大伙': '🍱',
+        '炒饭': '🍚', '炒面': '🍝', '预制菜': '📦', '速冻水饺': '🥟',
+        '现做菜': '🥘', '咖喱饭': '🍛', '沙县小吃鸡腿饭': '🍗',
+        '华莱士': '🍗', '塔思汀': '🍔', '麻辣烫': '🍲', '袁记云饺': '🥟',
+        '拼好饭小吃': '🍢', '韩式炸鸡': '🍗', '烧烤': '🍖', '火锅': '🫕',
+        '水煮': '🥘', '中式快餐': '🥡', '轻食': '🥗', '披萨': '🍕',
+        '煮面': '🍜', '牛约堡': '🍔', '超级好吃煲': '🥘', '饭团': '🍙'
+    };
+
+    function getEmoji(name) {
+        return foodEmojis[name] || '🍽️';
+    }
+
+    function parseMD(text) {
+        const lines = text.split('\n');
+        const items = [];
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const parts = trimmed.split(/\s+/);
+            if (parts.length < 4) continue;
+            const health = parseInt(parts[parts.length - 1]);
+            const price = parseInt(parts[parts.length - 2]);
+            const method = parts[parts.length - 3];
+            const name = parts.slice(0, -3).join(' ');
+            if (isNaN(health) || isNaN(price)) continue;
+            if (health < 1 || health > 5) continue;
+            items.push({ name, method, price, health });
+        }
+        return items;
+    }
+
+    async function loadData() {
+        const loadingArea = document.getElementById('loadingArea');
+        const errorArea = document.getElementById('errorArea');
+        const mainApp = document.getElementById('mainApp');
+
+        try {
+            const resp = await fetch('今天吃什么.md');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const text = await resp.text();
+            allFoods = parseMD(text);
+            if (allFoods.length === 0) throw new Error('未解析到任何食物条目');
+
+            // Initialize all pills as active
+            document.querySelectorAll('.pill[data-filter="method"]').forEach(p => p.classList.add('active'));
+            document.querySelectorAll('.pill[data-filter="health"]').forEach(p => p.classList.add('active'));
+
+            dataLoaded = true;
+            loadingArea.style.display = 'none';
+            mainApp.style.display = 'flex';
+            mainApp.style.flexDirection = 'column';
+            mainApp.style.gap = '20px';
+            updatePoolCount();
+        } catch (err) {
+            loadingArea.style.display = 'none';
+            errorArea.style.display = 'block';
+            errorArea.textContent = '⚠️ 加载菜单失败：' + err.message + '\n请确保通过 HTTP 访问（非 file://），且 今天吃什么.md 在同目录下。';
+        }
+    }
+
+    // ==================== FILTERS ====================
+    function getActiveFilters() {
+        const activeMethods = [];
+        document.querySelectorAll('.pill[data-filter="method"].active').forEach(p => {
+            activeMethods.push(p.dataset.value);
+        });
+        const activeHealths = [];
+        document.querySelectorAll('.pill[data-filter="health"].active').forEach(p => {
+            activeHealths.push(parseInt(p.dataset.value));
+        });
+        const cheapOnly = document.getElementById('cheapToggle').checked;
+        return { activeMethods, activeHealths, cheapOnly };
+    }
+
+    function getFilteredFoods() {
+        const { activeMethods, activeHealths, cheapOnly } = getActiveFilters();
+        return allFoods.filter(f => {
+            if (activeMethods.length > 0 && !activeMethods.includes(f.method)) return false;
+            if (activeHealths.length > 0 && !activeHealths.includes(f.health)) return false;
+            if (cheapOnly && f.price > 15) return false;
+            return true;
+        });
+    }
+
+    function updatePoolCount() {
+        const filtered = getFilteredFoods();
+        document.getElementById('poolCount').textContent = filtered.length;
+        const btn = document.getElementById('rollBtn');
+        btn.disabled = filtered.length === 0;
+        if (filtered.length === 0) {
+            btn.textContent = '😵 没有匹配项';
+        } else {
+            btn.textContent = '🎯 随机选择';
+        }
+    }
+
+    // ==================== WEIGHTED RANDOM ====================
+    function weightedRandom(items) {
+        if (items.length === 0) return null;
+        const totalWeight = items.reduce((sum, item) => sum + item.health, 0);
+        if (totalWeight === 0) return items[Math.floor(Math.random() * items.length)];
+        let r = Math.random() * totalWeight;
+        for (const item of items) {
+            r -= item.health;
+            if (r <= 0) return item;
+        }
+        return items[items.length - 1];
+    }
+
+    // ==================== UI ====================
+    function roll() {
+        const filtered = getFilteredFoods();
+        if (filtered.length === 0) return;
+
+        const result = weightedRandom(filtered);
+        const area = document.getElementById('resultArea');
+
+        const healthStars = '⭐'.repeat(result.health) + '☆'.repeat(5 - result.health);
+        const healthClass = result.health <= 2 ? ' low' : '';
+        const emoji = getEmoji(result.name);
+
+        area.innerHTML = `
+            <div class="result-card">
+                <div class="food-emoji">${emoji}</div>
+                <div class="food-name">${result.name}</div>
+                <div class="food-meta">
+                    <span class="meta-tag method">${result.method}</span>
+                    <span class="meta-tag price">¥${result.price}</span>
+                    <span class="meta-tag health${healthClass}">
+                        <span class="stars">${healthStars}</span>
+                    </span>
+                </div>
+            </div>
+            <button class="again-btn" onclick="roll()" style="margin-top:12px;">
+                🔄 再来一次
+            </button>
+        `;
+
+        // Scroll to result
+        area.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Haptic feedback if available
+        if (navigator.vibrate) {
+            navigator.vibrate([30, 50, 30]);
+        }
+    }
+
+    // ==================== EVENT BINDINGS ====================
+    function initFilters() {
+        // Pill toggle
+        document.querySelectorAll('.pill').forEach(pill => {
+            pill.addEventListener('click', function() {
+                const group = this.dataset.filter;
+                // Method & health filters: multi-select, toggle this one
+                // But require at least 1 active
+                const siblings = document.querySelectorAll(`.pill[data-filter="${group}"]`);
+                const activeCount = document.querySelectorAll(`.pill[data-filter="${group}"].active`).length;
+
+                if (this.classList.contains('active') && activeCount <= 1) {
+                    // Don't allow deselecting the last active filter
+                    return;
+                }
+                this.classList.toggle('active');
+                updatePoolCount();
+                // Clear result when filters change
+                document.getElementById('resultArea').innerHTML = '';
+            });
+        });
+
+        // Cheap toggle
+        document.getElementById('cheapToggle').addEventListener('change', function() {
+            updatePoolCount();
+            document.getElementById('resultArea').innerHTML = '';
+        });
+    }
+
+    // ==================== INIT ====================
+    initFilters();
+    loadData();
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    </script>
+</body>
+</html>
